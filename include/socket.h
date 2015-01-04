@@ -19,7 +19,7 @@ namespace MY_NET
         private:
             int m_fd;
         public:
-            CSocket(fd):m_fd(fd)
+            CSocket(int fd):m_fd(fd)
         {
         }
             void bind(const std::string& ip,int port)
@@ -33,25 +33,22 @@ namespace MY_NET
                 if(-1 == ::listen(m_fd,num))
                     ERR_EXIT("listen");
             }
-            int accept(std::string& ip(""),int& port = 0)
+            int accept(std::string* ip = NULL ,int* port = NULL)
             {
                 CInetAddr client_addr;
-                int fd_client = ::accept(m_fd,(struct sockaddr*)&client_addr,sizeof(struct sockaddr));
+                socklen_t len = sizeof(sockaddr);
+                int fd_client = ::accept(m_fd,(struct sockaddr*)&client_addr,&len);
                 if( -1 == fd_client)
                     ERR_EXIT("accept");
-                ip = client_addr.getip();
-                port = client_addr.getport();
+                *ip = client_addr.getip();
+                *port = client_addr.getport();
                 return fd_client;
             }
             void connect(const std::string& ip,int port)
             {
                CInetAddr server_addr(ip,port);
-               if(-1 != ::connect(m_fd,(struct sockaddr*)&server_ip,sizeof(struct sockaddr)))
+               if(-1 != ::connect(m_fd,(struct sockaddr*)&server_addr,sizeof(struct sockaddr)))
                    ERR_EXIT("connect");
-            }
-            ~CSocket()
-            {
-                close(m_fd);
             }
 
     };

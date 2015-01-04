@@ -1,17 +1,19 @@
 #ifndef __EPOLL_H__
 #define __EPOLL_H__
 #include <sys/epoll.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include "udp_transport.h"
-#define MAX_SIZE 1024
+#include <iostream>
 #define ERR_EXIT(m)\
     do{\
         perror(m);\
         exit(EXIT_FAILURE);\
     }while(0)
 
+typedef void (*HandleMessageCallback)(int sockfd,const std::string& ip,int port,char* buf,int size);
 namespace MY_NET
 {
-    typedef void HandleMessageCallback(int sockfd,std::string& ip,int port,char* buf,int size);
     class CEpoll
     {
         public:
@@ -22,40 +24,39 @@ namespace MY_NET
                     ERR_EXIT("epoll_create");
                 struct epoll_event my_event;
                 memset(&my_event,0,sizeof(my_event));
-                my_event.event = EPOLLIN | EPOLLET;
+                my_event.events = EPOLLIN | EPOLLET;
                 my_event.data.fd = m_sockfd;
-                if(0 != epoll_ctrl(m_epollfd,EPOLL_CTL_ADD,m_sockfd,&my_event))
+                if(0 != epoll_ctl(m_epollfd,EPOLL_CTL_ADD,m_sockfd,&my_event))
                     ERR_EXIT("epoll_create");
                 set_nonblock(m_sockfd);
-                m_pevents = new epoll_event[maxsize];
+                m_events = new epoll_event[maxsize];
             }
             void wait()
             {
-                m_readysize = epoll_wait(m_epollfd,m_events,maxsize,-1);
+                m_readysize = epoll_wait(m_epollfd,m_events,m_maxsize,-1);
                 if(m_readysize == -1)
                     ERR_EXIT("epoll_wait");
             }
             void HandleUDPRead()
             {
-                char buf[MAX_SIZE] = {0};
+                char buf[UDP_MAX_SIZE] = {0};
                 for(int index = 0;index < m_readysize;index++)
                 {
-                    if(m_events[i].events & EPOLLIN)
+                    if(m_events[index].events & EPOLLIN)
                     {
-                        int sockfd = events[i].data.fd;
+                        int sockfd = m_events[index].data.fd;
                         while(1)
                         {
-                            CUdpTransport upd(sockfd);
-                            memset(buf,0,MAX_SIZE);
-                            std::string ip;
-                            int port;
-                            int ret = udp.recv(ip,port,buf,MAX_SIZE-1);
+                            CUdpTransport udp(sockfd);
+                            memset(buf,0,UDP_MAX_SIZE);
+                           CInetAddr addr;
+                            int ret = udp.recv(buf,UDP_MAX_SIZE-1,&addr);
                             if(ret<0)
                             {
                                 if(errno == EAGAIN)
                                     break;
                             }
-                            m_onMessage(sockfd,ip,port,buf,ret);
+                            m_onMessage(sockfd,addr.getip(),addr.getport(),buf,ret);
                         }
 
                     }
@@ -76,10 +77,11 @@ namespace MY_NET
         private:
             int m_sockfd;
             int m_epollfd;
-            struct epoll_event* m_pevents;
+            struct epoll_event* m_events;
             int m_maxsize;
             int m_readysize;
-            void set_nonblock(int fd)
+            HandleMessageCallback m_onMessage;
+            void set_nonblock(int sockfd)
             {     
                 int old;
                 old = fcntl(sockfd,F_GETFL);
@@ -95,4 +97,4 @@ namespace MY_NET
 
     };
 }
-
+#endif

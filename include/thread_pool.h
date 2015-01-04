@@ -32,24 +32,20 @@ namespace MY_THREAD
     class CThreadPool
     {
         public:
-            CThreadPool(int nworkers=0,int ncapacity=0):m_worker(nworkers),m_que(ncapacity),m_run(&m_que)
+            CThreadPool(int nworkers=0,int ncapacity=0):m_worker(nworkers),m_que(ncapacity),m_run(&m_que),m_stop(true)
         {
         }
-            getInstance()
-            {
-
-            }
             void on()
             {
                 if(m_stop == true)
                 {
+                    m_que.setstop(false);
+                    m_stop = false;
                     std::vector<CThread>::iterator itr = m_worker.begin();
                     for(;itr != m_worker.end();++itr)
                     {
                         itr->start(&m_run);
                     }
-                    m_que.setstop(false);
-                    m_stop = false;
                 }
             }
             void off()

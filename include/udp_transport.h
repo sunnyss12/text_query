@@ -1,7 +1,11 @@
 #ifndef __UDP_CONNECT_H__
 #define __UDP_CONNECT_H__
-#include "connect.h"
+#include "transport.h"
+#include <errno.h> 
 #include "inet_addr.h"
+#include <stdio.h>
+#include <stdlib.h>
+#define UDP_MAX_SIZE 1024
 #define ERR_EXIT(m)\
     do{\
         perror(m);\
@@ -15,37 +19,36 @@ namespace MY_NET
         private:
             CInetAddr m_addr;
         public:
-            CUdpTransport(int fd,std::string ip = "",int port = 0):CConnect(fd),m_addr(ip,port)
+            CUdpTransport(int fd,std::string ip = "",int port = 0):CTransport(fd),m_addr(ip,port)
         {
         }
-            int recv(char* buf,int size,std::string& ip,int& port)
+            int recv(char* buf,int size,CInetAddr* paddr = NULL)
             {
-                int size = recvfrom(m_fd,buf,sizeof(buf),0,(struct sockaddr*)&m_addr,sizeof(struct sockaddr));
-                if(-1 == size)
+                socklen_t len  = sizeof(struct sockaddr);
+                int readn = recvfrom(m_fd,buf,size,0,(struct sockaddr*)paddr,&len);
+                if(-1 == readn)
                 {
-                    if(error != EAGAIN)
+                    if(errno != EAGAIN)
                         ERR_EXIT("recvfrom");
                 }
-                ip = m_addr.getip();
-                port = m_addr.getport();
-                return size;
+                return readn;
             }
             int send(char* buf,int size)
             {
-                int size = sendto(m_fd,buf,size,0,(struct sockaddr*)&m_addr,sizeof(struct sockaddr));
-                if(-1 == size)
+                int sendn = sendto(m_fd,buf,size,0,(struct sockaddr*)&m_addr,sizeof(struct sockaddr));
+                if(-1 == sendn)
                 {
-                    if(error != EAGAIN)
+                    if(errno != EAGAIN)
                         ERR_EXIT("sendto");
                 }
-                return size;
+                return sendn;
             }
-            CUdpTransport& setip(std::string& ip)
+            CUdpTransport& setip(const std::string& ip)
             {
                 m_addr.setip(ip);
                 return *this;
             }
-            CUdpTransport& setport(int port)
+            CUdpTransport& setport(const int port)
             {
                 m_addr.setport(port);
                 return *this;

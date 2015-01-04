@@ -1,76 +1,96 @@
 #include "epoll.h"
 #include "thread_pool.h"
 #include "socket.h"
-
+#include <iostream>
+#define ERR_EXIT(m)\
+    do{\
+        perror(m);\
+        exit(EXIT_FAILURE);\
+    }while(0)
 
 class CTextQueryTask:public MY_THREAD::CTask
 {
     public:
-        CTextQueryTask(int sockfd,std::string & ip,int port,char* buf,int size):m_sockfd(sockfd),m_ip(ip),m_port(port),m_buf(buf),m_size(size)
+        CTextQueryTask(int sockfd,const std::string & ip,int port,char* buf,int size):m_sockfd(sockfd),m_ip(ip),m_port(port),m_buf(buf),m_size(size)
         {
         }
         void execute()
         {
-            CUdpTransport udp(m_sockfd);
-            udp.setip(m_ip).setport(m_port);
-            udp.send(m_buf,m_size);
+            std::cout<<"execute"<<m_ip<<":"<<m_port<<":"<<std::endl;
+            int sockfd = socket(AF_INET,SOCK_DGRAM,0);
+            MY_NET::CUdpTransport udp(sockfd,m_ip,m_port);
+            udp.send(m_buf,strlen(m_buf));
+            close(sockfd);
         }
     private:
             int m_sockfd;
-            std::string m_ip;
+            const std::string m_ip;
             int m_port;
             char* m_buf;
             int m_size;
-}
+};
+
 class textQueryServer;
-void ontextQueryMessage(int sockfd,std::string& ip,int port,char* buf,int size)
-{
-    CThreadPool* pthreadpool = textQueryServer::getThreadPool();
-    CTextQueryTask* ptask = new CTextQueryTask(sockfd,ip,port,buf,size);
-    pthreadpool->addTask(ptask);
-    
-}
+extern void ontextQueryMessage(int sockfd,const std::string& ip,int port,char* buf,int size);
+
 class textQueryServer
 {
     public:
-        textQueryServer(std::string& ip = "192.168.1.116",int port = 8888,std::string& distdir = "~/src/dis.txt"):m_ip(ip),m_port(port),m_distdir(distdir)
+        textQueryServer(const std::string& ip = std::string("192.168.1.116"),int port = 8888,const std::string& distdir = std::string("~/src/dis.txt")):m_ip(ip),m_port(port),m_distdir(distdir)
         {
             m_sockfd = socket(AF_INET,SOCK_DGRAM,0);
-            m_psocket = new CSocket(m_sockfd);
+            if(-1 == m_sockfd)
+                ERR_EXIT("socket");
+            m_psocket = new MY_NET::CSocket(m_sockfd);
             m_psocket->bind(m_ip,m_port);
-            m_pthreadpool = new CThreadPool(5,10);
-            m_pepoll = new CEpoll(m_sockfd,1024);
+            m_pthreadpool = new MY_THREAD::CThreadPool(5,10);
+            m_pepoll = new MY_NET::CEpoll(m_sockfd,1024);
         }
-        static CThreadPool* getThreadPool()
+        static MY_THREAD::CThreadPool* getThreadPool()
         {
             return m_pthreadpool;
         }
-        void setOnMessage(HandleMessageCallback onMessage)
-        {
-            m_pepoll->setOnMessage(onMessage);
-        }
         void start()
         {
+            m_pthreadpool->on();
+            std::cout<<"start"<<std::endl;
+            m_pepoll->setOnMessage(ontextQueryMessage);
             while(1)
             {
+                std::cout<<"waitbefore"<<std::endl;
                 m_pepoll->wait();
+                std::cout<<"waitafter"<<std::endl;
                 m_pepoll->HandleUDPRead();
             }
+        }
+        ~textQueryServer()
+        {
+            delete m_pepoll;
+            delete m_pthreadpool;
+            delete m_psocket;
+            close(m_sockfd);
+
         }
     private:
         std::string m_ip;
         int m_port;
         std::string m_distdir;
         int m_sockfd;
-        CSocket* m_psocket;
-        CEpoll* m_pepoll;
-        static CThreadPool* m_pthreadpool;
+        MY_NET::CSocket* m_psocket;
+        MY_NET::CEpoll* m_pepoll;
+        static MY_THREAD::CThreadPool* m_pthreadpool;
+};
+MY_THREAD::CThreadPool* textQueryServer::m_pthreadpool = NULL;
+void ontextQueryMessage(int sockfd,const std::string& ip,int port,char* buf,int size)
+{
+    std::cout<<"ontextQueryMessage"<<std::endl;
+    CTextQueryTask* ptask = new CTextQueryTask(sockfd,ip,port,buf,size);
+    MY_THREAD::CThreadPool* pthreadpool = textQueryServer::getThreadPool();
+    if(pthreadpool != NULL)
+        pthreadpool->addTask(ptask);
 }
-CThreadPool* textQueryServer::m_pthreadpool = NULL;
-
 int main(int argc,char* argv[])
 {
-    textQueryServer server;
-    server.setOnMessage(ontextQueryMessage);
+    textQueryServer server(std::string(argv[1]),atoi(argv[2]));
     server.start();
 }

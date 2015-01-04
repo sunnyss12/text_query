@@ -2,6 +2,15 @@
 #define __THREAD_H__
 #include <pthread.h>
 #include <stdexcept>
+#include <iostream>
+#include <stdlib.h>
+#include <stdio.h>
+#define ERR_EXIT(m)\
+    do{\
+        perror(m);\
+        exit(EXIT_FAILURE);\
+    }while(0)
+
 namespace MY_THREAD
 {
     class CThreadRun
@@ -24,9 +33,8 @@ namespace MY_THREAD
             }
             void start(CThreadRun* run)
             {
-                m_thread = pthread_create(&m_thread,NULL,thread_run,run);
-                if(m_thread)
-                   throw std::runtime_error("thread create failed");
+                if(pthread_create(&m_thread,NULL,thread_run,run))
+                    ERR_EXIT("pthread_create");                   
             }
         private:
             pthread_t m_thread; 
