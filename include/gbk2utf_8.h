@@ -1,3 +1,5 @@
+#ifndef __GBK2UTF_8_H__
+#define __GBK2UTF_8_H__
 namespace MY_LANGTRAN
 {
     class lang
@@ -7,5 +9,6 @@ namespace MY_LANGTRAN
             void destroy(char** utfStr);
     };
 }
+#endif
 
 

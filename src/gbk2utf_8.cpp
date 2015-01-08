@@ -1,6 +1,12 @@
+#include "gbk2utf_8.h"
+#include <cstddef>
+#include <stdio.h>
+#include <locale.h>
+#include <stdlib.h>
+#include <string.h>
 int MY_LANGTRAN::lang::gbk2utf8(char** utfStr,const char* srcStr)
 {
-    if(NULL == strStr)
+    if(NULL == srcStr)
     {
         printf("bad Parameter:srcStr is null\n");
         return -1;
@@ -14,7 +20,7 @@ int MY_LANGTRAN::lang::gbk2utf8(char** utfStr,const char* srcStr)
     if(unicodeLen<=0)
     {
         printf("mbstowcs:cannot transfer\n");
-        retrun -1;
+        return -1;
     }
     wchar_t* unicodeStr=(wchar_t*)calloc(sizeof(wchar_t),unicodeLen+1);
     if(unicodeStr == NULL)
@@ -35,19 +41,19 @@ int MY_LANGTRAN::lang::gbk2utf8(char** utfStr,const char* srcStr)
         free(unicodeStr);
         return -1;
     }
-    *utfStr = calloc(sizeof(char),utfLen+1);
+    *utfStr = (char*)calloc(sizeof(char),utfLen+1);
     if(*utfStr == NULL)
     {
         printf("calloc failed\n");
         free(unicodeStr);
         return -1;
     }
-    wcstombs(utfStr,unicodeStr,utfLen);
+    wcstombs(*utfStr,unicodeStr,utfLen);
     utfStr[utfLen]=0;
     free(unicodeStr);
     return utfLen;
 }
-void MY_LANGTRAN::lang::gestroy(char** utfStr)
+void MY_LANGTRAN::lang::destroy(char** utfStr)
 {
     free(*utfStr);
     *utfStr = NULL;

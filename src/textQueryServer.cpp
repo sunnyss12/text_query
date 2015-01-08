@@ -1,6 +1,3 @@
-#include "epoll.h"
-#include "thread_pool.h"
-#include "socket.h"
 #include <iostream>
 #include <ext/hash_map>
 #include <set>
@@ -8,6 +5,13 @@
 #include <fstream>
 #include <sstream>
 #include <cctype>
+#include "epoll.h"
+#include "thread_pool.h"
+#include "socket.h"
+#include "config.h"
+#include <sys/types.h>
+#include <dirent.h>
+#include <iomanip>
 #define ERR_EXIT(m)\
     do{\
         perror(m);\
@@ -47,14 +51,22 @@ class CTextQueryTask:public MY_THREAD::CTask
         int m_size;
 };
 
-class textQueryServer;
 extern void ontextQueryMessage(int sockfd,const std::string& ip,int port,char* buf,int size);
 
 class textQueryServer
 {
+    friend class CTextQueryTask;
     public:
-        textQueryServer(const std::string& ip = std::string("192.168.1.116"),int port = 8888,const std::string& distdir = std::string("~/src/dist/"),const std::string& datadir("~src/Data/"),const std::string stopdir("~/src/stop/")):m_ip(ip),m_port(port),m_distdir(distdir),m_datadir(datadir),m_stopdir(stopdir)
+        textQueryServer(const std::string& configpath):m_config(configpath)
     {
+        m_config.getconfigInfo("textquery","IP",m_ip);
+        m_config.getconfigInfo("textquery","port",m_port);
+        m_config.getconfigInfo("textquery","distdir",m_distdir);//yuliao dir
+        m_config.getconfigInfo("textquery","datadir",m_datadir);//fenci dir
+        m_config.getconfigInfo("textquery","stopdir",m_stopdir);//tingliuci dir
+        m_config.getconfigInfo("textquery","threadnum",m_thread_num);
+        m_config.getconfigInfo("textquery","taskcapacity",m_task_capacity);
+        m_config.getconfigInfo("textquery","wordfreqpath",m_wordfreqpath);
         m_sockfd = socket(AF_INET,SOCK_DGRAM,0);
         if(-1 == m_sockfd)
             ERR_EXIT("socket");
@@ -62,13 +74,14 @@ class textQueryServer
         m_psocket->bind(m_ip,m_port);
         m_pthreadpool = new MY_THREAD::CThreadPool(5,10);
         m_pepoll = new MY_NET::CEpoll(m_sockfd,1024);
-        if(!NLPLR_Init(m_datadir.c_str()))
+        if(!NLPIR_Init(m_datadir.c_str()))
         {
             std::cout<<"NLPLR Init Fail!"<<std::endl;
             exit(1);
         }
 
     }
+        
         static MY_THREAD::CThreadPool* getThreadPool()
         {
             return m_pthreadpool;
@@ -108,7 +121,7 @@ class textQueryServer
                 if(filepath == "." || filepath == "..")
                     continue;
 
-                file = m_stopdir + "/" + pdirent->d_name;
+                filepath = m_stopdir + "/" + pdirent->d_name;
                 getstopword(filepath);
             }
             closedir(pdir);
@@ -137,7 +150,7 @@ class textQueryServer
                 ERR_EXIT("opendir");
             struct dirent* pdirent;
             std::string filepath;
-            while((pdiren = readdir(pdir)) != NULL)
+            while((pdirent = readdir(pdir)) != NULL)
             {
                 filepath = pdirent->d_name;
                 if(filepath == "." || filepath == "..")
@@ -172,11 +185,11 @@ class textQueryServer
                 }
 
                 partiline = (char*)NLPIR_ParagraphProcess(line.c_str(),0);
-                sin.str(participle);
+                sin.str(partiline);
                 sin.clear();
                 while(sin>>partiword)
                 {
-                    if(m_stopword.find(partiword) != m_stopword.end())
+                    if(m_set_stop.find(partiword) != m_set_stop.end())
                         continue;
                     if(partiword.size() == 1 && ispunct(partiword[0]))
                         continue;
@@ -185,20 +198,20 @@ class textQueryServer
             }
             fin.close();
         }
-        void wordfreq_savetofile(std::string filepath)
+        void wordfreq_savetofile()
         {
             std::fstream fout;
-            fin.open(filepath.c_str(),std::fstream::out|std::fstream::trunc);
+            fout.open(m_wordfreqpath.c_str(),std::fstream::out|std::fstream::trunc);
             if(!fout.is_open())
             {
-                std::cout<<filepath<<"cannot failed"<<std::endl;
+                std::cout<<m_wordfreqpath<<"cannot failed"<<std::endl;
                 exit(0);
 
             }
             __gnu_cxx::hash_map<std::string,int,NM::CMyHash>::iterator itr = m_word_freq.begin();
             for(;itr!=m_word_freq.end();itr++)
             {
-                fout<<std::left<<std::sew(20)<<itr->first<<std::left<<itr->second<<std::endl;
+                fout<<std::left<<std::setw(20)<<itr->first<<std::left<<itr->second<<std::endl;
             }
             fout.close();
 
@@ -208,14 +221,19 @@ class textQueryServer
         {
             getstopword();
             getwordfreq();
-            wordfreq_savetofile()
+            wordfreq_savetofile();
         }
+
     private:
+        NM::CConfig m_config;
         std::string m_ip;
         int m_port;
         std::string m_distdir;//语料库路径
         std::string m_datadir;//分词词典路径
         std::string m_stopdir;//停用词路径
+        std::string m_wordfreqpath;//词频存放的文件名
+        int m_thread_num;
+        int m_task_capacity;
         int m_sockfd;
         MY_NET::CSocket* m_psocket;
         MY_NET::CEpoll* m_pepoll;
@@ -235,6 +253,8 @@ void ontextQueryMessage(int sockfd,const std::string& ip,int port,char* buf,int 
 }
 int main(int argc,char* argv[])
 {
-    textQueryServer server(std::string(argv[1]),atoi(argv[2]));
+    std::string configpath = argv[1];
+    textQueryServer  server(configpath);
+    server.init();
     server.start();
 }
