@@ -2,7 +2,7 @@
 #define __GBK2UTF_8_H__
 namespace MY_LANGTRAN
 {
-    class lang
+    class CLang
     {
         public:
             int gbk2utf8(char** utfStr,const char* srcStr);

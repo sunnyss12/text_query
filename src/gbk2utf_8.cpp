@@ -4,7 +4,7 @@
 #include <locale.h>
 #include <stdlib.h>
 #include <string.h>
-int MY_LANGTRAN::lang::gbk2utf8(char** utfStr,const char* srcStr)
+int MY_LANGTRAN::CLang::gbk2utf8(char** utfStr,const char* srcStr)
 {
     if(NULL == srcStr)
     {
@@ -49,11 +49,11 @@ int MY_LANGTRAN::lang::gbk2utf8(char** utfStr,const char* srcStr)
         return -1;
     }
     wcstombs(*utfStr,unicodeStr,utfLen);
-    utfStr[utfLen]=0;
+    (*utfStr)[utfLen]=0;
     free(unicodeStr);
     return utfLen;
 }
-void MY_LANGTRAN::lang::destroy(char** utfStr)
+void MY_LANGTRAN::CLang::destroy(char** utfStr)
 {
     free(*utfStr);
     *utfStr = NULL;
