@@ -1,92 +1,79 @@
 #include <iostream>
+#include <string>
+#include "singleton.h"
 #include <ext/hash_map>
-#include <set>
-#include "NLPIR.h"
 #include <fstream>
 #include <sstream>
-#include <cctype>
+#include <queue>
 #include "epoll.h"
 #include "thread_pool.h"
 #include "socket.h"
 #include "config.h"
-#include <sys/types.h>
-#include <dirent.h>
-#include <sys/stat.h>
-#include <iomanip>
-#include "gbk2utf_8.h"
-#define ERR_EXIT(m)\
-    do{\
-        perror(m);\
-        exit(EXIT_FAILURE);\
-    }while(0)
-
-namespace NM
-{
-    struct CMyHash
-    {
-        int operator()(const std::string& obj)const
-        {
-            __gnu_cxx::hash<const char*> tmp_hash;
-            return static_cast<int>(tmp_hash(obj.c_str()));
-        }
-    };
-}
-class CTextQueryTask:public MY_THREAD::CTask
-{
-    public:
-        CTextQueryTask(int sockfd,const std::string & ip,int port,char* buf,int size):m_sockfd(sockfd),m_ip(ip),m_port(port),m_buf(buf),m_size(size)
-    {
-    }
-        void execute()
-        {
-            std::cout<<"execute"<<m_ip<<":"<<m_port<<":"<<std::endl;
-            int sockfd = socket(AF_INET,SOCK_DGRAM,0);
-            MY_NET::CUdpTransport udp(sockfd,m_ip,m_port);
-            udp.send(m_buf,strlen(m_buf));
-            close(sockfd);
-        }
-    private:
-        int m_sockfd;
-        const std::string m_ip;
-        int m_port;
-        char* m_buf;
-        int m_size;
-};
-
+#include "common.h"
+#include "edit_distance.h"
+#define MAX_QUE_SIZE 10
 extern void ontextQueryMessage(int sockfd,const std::string& ip,int port,char* buf,int size);
-
-class textQueryServer
+class CTextQueryServer
 {
-    friend class CTextQueryTask;
+    friend class CSingleton<CTextQueryServer>;
     public:
-    textQueryServer(const std::string& configpath):m_config(configpath)
+    CTextQueryServer()
     {
-        m_config.getconfigInfo("textquery","IP",m_ip);
-        m_config.getconfigInfo("textquery","port",m_port);
-        m_config.getconfigInfo("textquery","distdir",m_distdir);//yuliao dir
-        m_config.getconfigInfo("textquery","datadir",m_datadir);//fenci dir
-        m_config.getconfigInfo("textquery","stopdir",m_stopdir);//tingliuci dir
-        m_config.getconfigInfo("textquery","threadnum",m_thread_num);
-        m_config.getconfigInfo("textquery","taskcapacity",m_task_capacity);
-        m_config.getconfigInfo("textquery","wordfreqpath",m_wordfreqpath);
+        NM::CConfig* pconfig = NM::CConfig::getInstance();
+        pconfig->getconfigInfo("textquery","IP",m_ip);
+        pconfig->getconfigInfo("textquery","port",m_port);
+        pconfig->getconfigInfo("textquery","threadnum",m_thread_num);
+        pconfig->getconfigInfo("textquery","taskcapacity",m_task_capacity);
         m_sockfd = socket(AF_INET,SOCK_DGRAM,0);
         if(-1 == m_sockfd)
             ERR_EXIT("socket");
         m_psocket = new MY_NET::CSocket(m_sockfd);
         m_psocket->bind(m_ip,m_port);
-        m_pthreadpool = new MY_THREAD::CThreadPool(5,10);
+        m_pthreadpool = new MY_THREAD::CThreadPool(m_thread_num,m_task_capacity);
         m_pepoll = new MY_NET::CEpoll(m_sockfd,1024);
-        if(!NLPIR_Init(m_datadir.c_str(),UTF8_CODE))
-        {
-            std::cout<<"NLPLR Init Fail!"<<std::endl;
-            exit(1);
-        }
 
     }
+    static CTextQueryServer* getInstance()
+    {
+        return CSingleton<CTextQueryServer>::getInstance(); 
+    }
+    void readdict()
+    {
+        std::string wordfreqpath;
+        NM::CConfig* pconfig = NM::CConfig::getInstance();
+        pconfig->getconfigInfo("textquery","wordfreqpath",wordfreqpath);
+        std::cout<<"distpath:"<<wordfreqpath<<std::endl;
+        std::fstream fin;
+        fin.open(wordfreqpath.c_str());
+        if(!fin.is_open())
+        {
+            std::cout<<wordfreqpath<<"open failed"<<std::endl;
+            exit(0);
+        }
+        std::string line;
+        std::string word;
+        int freq;
+        std::stringstream sin;
+        int cnt = 0;
+        while(std::getline(fin,line))
+        {
+            sin.clear();
+            sin.str(line);
+            sin>>word>>freq;
+            m_word_freq[word] = freq;
+            cnt++;
+        }
+        std::cout<<"cnt:"<<cnt<<std::endl;
+        fin.close();
+    }
 
-    static MY_THREAD::CThreadPool* getThreadPool()
+    MY_THREAD::CThreadPool* getThreadPool()
     {
         return m_pthreadpool;
+    }
+    __gnu_cxx::hash_map<std::string,int,NM::CMyHash>& getwordfreq()
+    {
+        return m_word_freq;
     }
     void start()
     {
@@ -101,187 +88,140 @@ class textQueryServer
             m_pepoll->HandleUDPRead();
         }
     }
-    ~textQueryServer()
+    ~CTextQueryServer()
     {
         delete m_pepoll;
         delete m_pthreadpool;
         delete m_psocket;
         close(m_sockfd);
-        NLPIR_Exit();
-
     }
-    void getstopword()
-    {
-        DIR* pdir = opendir(m_stopdir.c_str());
-        if(pdir == NULL)
-            ERR_EXIT("opendir");
-        struct dirent* pdirent;
-        std::string filepath;
-        while((pdirent = readdir(pdir)) != NULL)
-        {
-            filepath = pdirent->d_name;
-            if(filepath == "." || filepath == "..")
-                continue;
-
-            filepath = m_stopdir + "/" + pdirent->d_name;
-            getstopword(filepath);
-        }
-        closedir(pdir);
-    }
-    void getstopword(std::string& filepath)
-    {
-        std::fstream fin;
-        fin.open(filepath.c_str());
-        if(!fin.is_open())
-        {
-            std::cout<<filepath<<"open failed"<<std::endl;
-            exit(0);
-        }
-        std::string stopword;
-        while(fin>>stopword)
-        {
-            m_set_stop.insert(stopword);
-        }
-        fin.close();
-
-    }
-    void getwordfreq_dir(std::string& dirpath)
-    {
-        DIR* pdir = opendir(dirpath.c_str());
-        if(pdir == NULL)
-            ERR_EXIT("opendir");
-        struct dirent* pdirent;
-        std::string filepath;
-        struct stat statbuf;
-        while((pdirent = readdir(pdir)) != NULL)
-        {
-            filepath = pdirent->d_name;
-            if(filepath == "." || filepath == "..")
-                continue;
-            filepath = dirpath + "/" + pdirent->d_name;
-            if( 0 !=stat(filepath.c_str(),&statbuf))
-                ERR_EXIT("stat");
-            if(S_ISDIR(statbuf.st_mode))
-            {
-                getwordfreq_dir(filepath);
-            }
-            else if(S_ISREG(statbuf.st_mode))
-            {
-                getwordfreq_file(filepath);
-            }
-        }
-        closedir(pdir);
-    }
-    void getwordfreq_file(std::string& filepath)
-    {
-        std::cout<<"filepath"<<filepath<<std::endl;
-        std::fstream fin;
-        fin.open(filepath.c_str());
-        if(!fin.is_open())
-        {
-            std::cout<<filepath<<"open failed"<<std::endl;
-            exit(0);
-        }
-        std::string line;
-        std::string partiline;
-        std::stringstream sin;
-        std::string partiword;
-        std::string str_upper("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
-        int pos;
-        MY_LANGTRAN::CLang lang;
-        char* utfStr = NULL;
-        int ret = -1;
-        while(std::getline(fin,line))
-        {
-            if(line.size() == 0)
-                continue;
-            ret = lang.gbk2utf8(&utfStr,line.c_str());
-            if(ret == -1)
-                continue;
-            line = utfStr;
-            lang.destroy(&utfStr);
-            pos = 0;
-            while( (pos = line.find_first_of(str_upper,pos)) != std::string::npos)
-            {
-                line[pos] = line[pos] + 'a' - 'A';
-                pos++;
-            }
-            
-            for(int i=0;i<line.size();i++)
-                if(ispunct(line[i]))
-                    line[i]=' ';
-            partiline = (char*)NLPIR_ParagraphProcess(line.c_str(),0);
-            sin.str(partiline);
-            //sin.str(line);
-            sin.clear();
-            while(sin>>partiword)
-            {
-                if(m_set_stop.find(partiword) != m_set_stop.end())
-                    continue;
-                //if(partiword.size() == 1 && ispunct(partiword[0]))
-                //    continue;
-                m_word_freq[partiword]++;
-            }
-        }
-        fin.close();
-    }
-    void wordfreq_savetofile()
-    {
-        std::fstream fout;
-        fout.open(m_wordfreqpath.c_str(),std::fstream::out|std::fstream::trunc);
-        if(!fout.is_open())
-        {
-            std::cout<<m_wordfreqpath<<"cannot failed"<<std::endl;
-            exit(0);
-
-        }
-        __gnu_cxx::hash_map<std::string,int,NM::CMyHash>::iterator itr = m_word_freq.begin();
-        for(;itr!=m_word_freq.end();itr++)
-        {
-            fout<<std::left<<std::setw(20)<<itr->first<<std::left<<itr->second<<std::endl;
-        }
-        fout.close();
-
-    }
-
-    void init()
-    {
-        getstopword();
-        getwordfreq_dir(m_distdir);
-        wordfreq_savetofile();
-    }
-
     private:
-    NM::CConfig m_config;
     std::string m_ip;
     int m_port;
-    std::string m_distdir;//语料库路径
-    std::string m_datadir;//分词词典路径
-    std::string m_stopdir;//停用词路径
-    std::string m_wordfreqpath;//词频存放的文件名
     int m_thread_num;
     int m_task_capacity;
     int m_sockfd;
     MY_NET::CSocket* m_psocket;
     MY_NET::CEpoll* m_pepoll;
-    static MY_THREAD::CThreadPool* m_pthreadpool;
+    MY_THREAD::CThreadPool* m_pthreadpool;
     __gnu_cxx::hash_map<std::string,int,NM::CMyHash> m_word_freq;
-    std::set<std::string> m_set_stop;//或者英文一个停用词，中文一个停用词。英文只需要用英文停用词判断
 
 };
-MY_THREAD::CThreadPool* textQueryServer::m_pthreadpool = NULL;
+
+namespace NM
+{
+    struct Data
+    {
+        std::string m_word;
+        int m_distance;
+        int m_freq;
+        public:
+        Data(std::string word,int distance,int freq):m_word(word),m_distance(distance),m_freq(freq)
+        {
+        }
+        bool operator<(const Data& obj)const
+        {
+            if(m_distance != obj.m_distance)
+                return m_distance < obj.m_distance;
+            else
+                return m_freq>obj.m_freq;
+        }
+
+    };
+    /*
+       struct CMyComp
+       {
+       bool operator()(std::pair<std::string,int>& left,std::pair<std::string,int>& right)   //<,大；>,小（距离大
+       {
+       if(left.second != right.second)
+       return left.second < right.second;
+       else
+       return left.
+       }
+
+       };
+       */
+}
+class CTextQueryTask:public MY_THREAD::CTask
+{
+    public:
+        CTextQueryTask(int sockfd,const std::string & ip,int port,std::string querystr,int size):m_sockfd(sockfd),m_ip(ip),m_port(port),m_querystr(querystr),m_size(size)
+    {
+    }
+        void execute()
+        {
+            std::cout<<"execute"<<m_ip<<":"<<m_port<<":"<<m_querystr<<std::endl;
+            CTextQueryServer* pserver = CTextQueryServer::getInstance();
+            __gnu_cxx::hash_map<std::string,int,NM::CMyHash> hm_wordfreq = pserver->getwordfreq();
+            std::cout<<"wordfreq size:"<<hm_wordfreq.size()<<std::endl;
+            __gnu_cxx::hash_map<std::string,int,NM::CMyHash>::iterator itr = hm_wordfreq.begin();
+            NM::Editdistance ed;
+            int distance;
+            for(;itr != hm_wordfreq.end();++itr)
+            {
+                distance = ed(m_querystr,itr->first);
+                NM::Data val(itr->first,distance,itr->second);
+                if(m_queue.size() < MAX_QUE_SIZE)
+                {
+                    m_queue.push(val);
+                }
+                else if(val < m_queue.top())
+                {
+                    m_queue.pop();
+                    m_queue.push(val);
+                }
+
+            }
+
+            int sockfd = socket(AF_INET,SOCK_DGRAM,0);
+            MY_NET::CUdpTransport udp(sockfd,m_ip,m_port);
+            std::string strquery;
+            if(!m_queue.size())
+            {
+                strquery = "cannot find";
+                udp.send(strquery.c_str(),strquery.size());
+                std::cout<<strquery<<std::endl;
+            }
+            else
+            {
+                std::stringstream sin;
+                while(m_queue.size())
+                {
+                    sin<<m_queue.top().m_word;
+                    sin<<":";
+                    sin<<m_queue.top().m_distance;
+                    sin<<":";
+                    sin<<m_queue.top().m_freq;
+                    std::cout<<m_queue.top().m_word<<":"<<m_queue.top().m_distance<<":"<<m_queue.top().m_freq<<std::endl;
+                    m_queue.pop();
+                }
+                strquery = sin.str();
+                udp.send(strquery.c_str(),strquery.size());
+            }
+            close(sockfd);
+        }
+    private:
+        int m_sockfd;
+        const std::string m_ip;
+        int m_port;
+        std::string m_querystr;
+        int m_size;
+      //  std::priority_queue<std::pair<std::string,int>,std::vector<std::pair<std::string,int> >,NM::CMyComp> m_queue;
+        std::priority_queue<NM::Data,std::vector<NM::Data> >m_queue;
+};
+
 void ontextQueryMessage(int sockfd,const std::string& ip,int port,char* buf,int size)
 {
     std::cout<<"ontextQueryMessage"<<std::endl;
     CTextQueryTask* ptask = new CTextQueryTask(sockfd,ip,port,buf,size);
-    MY_THREAD::CThreadPool* pthreadpool = textQueryServer::getThreadPool();
+    MY_THREAD::CThreadPool* pthreadpool = CTextQueryServer::getInstance()->getThreadPool();
     if(pthreadpool != NULL)
         pthreadpool->addTask(ptask);
 }
+
 int main(int argc,char* argv[])
 {
-    std::string configpath = argv[1];
-    textQueryServer  server(configpath);
-    server.init();
-    server.start();
+    CTextQueryServer* pserver = CTextQueryServer::getInstance();
+    pserver->readdict();
+    pserver->start();
 }

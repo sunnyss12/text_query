@@ -33,7 +33,7 @@ namespace MY_NET
                 }
                 return readn;
             }
-            int send(char* buf,int size)
+            int send(const char* buf,int size)
             {
                 int sendn = sendto(m_fd,buf,size,0,(struct sockaddr*)&m_addr,sizeof(struct sockaddr));
                 if(-1 == sendn)

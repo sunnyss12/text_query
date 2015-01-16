@@ -13,7 +13,7 @@ namespace MY_NET
         {
         }
             virtual int recv(char* buf,int size,CInetAddr* addr = NULL) = 0;
-            virtual int send(char* buf,int size) = 0;
+            virtual int send(const char* buf,int size) = 0;
             virtual ~CTransport()
             {
             }
