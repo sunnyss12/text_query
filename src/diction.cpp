@@ -173,4 +173,10 @@ void NM::CDiction::make_dict()
     wordfreq_savetofile();
 }
 
+int main(int argc,char* argv[])
+{
+    NM::CDiction* pdiction = NM::CDiction::getInstance();
+    pdiction->make_dict();
+
+}
 
