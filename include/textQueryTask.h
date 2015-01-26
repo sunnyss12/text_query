@@ -30,9 +30,12 @@ namespace NM
     class CTextQueryTask:public MY_THREAD::CTask
     {
         public:
-            CTextQueryTask(int sockfd,const std::string & ip,int port,std::string querystr,int size):m_sockfd(sockfd),m_ip(ip),m_port(port),m_querystr(querystr),m_size(size)
+            CTextQueryTask(int sockfd,const std::string& ip,int port,const std::string& querystr,int size):m_sockfd(sockfd),m_ip(ip),m_port(port),m_querystr(querystr),m_size(size)
         {
         }
+            virtual ~CTextQueryTask()
+            {
+            }
             void execute()
             {
                 std::cout<<"execute"<<m_ip<<":"<<m_port<<":"<<m_querystr<<std::endl;
@@ -40,30 +43,39 @@ namespace NM
                 getQueryInfo(deq);
                 sendMessage(deq);
             }
-            virtual void getQueryInfo(std::deque<NM::Data>& deq);
+            virtual void getQueryInfo(std::deque<NM::Data>& deq) = 0;
             void sendMessage(std::deque<NM::Data>& deq);
-        private:
+        protected:
             int m_sockfd;
             const std::string m_ip;
             int m_port;
-            std::string m_querystr;
+            const std::string m_querystr;
             int m_size;
 
     };
     class CTextQueryTaskSimple:public CTextQueryTask
     {
         public:
+            CTextQueryTaskSimple(int sockfd,const std::string& ip,int port,const std::string& querystr,int size):CTextQueryTask(sockfd,ip,port,querystr,size)
+        {
+        }
             virtual void getQueryInfo(std::deque<NM::Data>& deq);
     };
     class CTextQueryTaskWithIndex:public CTextQueryTask
     {
         public:
+            CTextQueryTaskWithIndex(int sockfd,const std::string& ip,int port,const std::string& querystr,int size):CTextQueryTask(sockfd,ip,port,querystr,size)
+        {
+        }
             virtual void getQueryInfo(std::deque<NM::Data>& deq);
 
     };
     class CTextQueryTaskWithCache:public CTextQueryTaskWithIndex
     {
         public:
+            CTextQueryTaskWithCache(int sockfd,const std::string& ip,int port,const std::string& querystr,int size):CTextQueryTaskWithIndex(sockfd,ip,port,querystr,size)
+        {
+        }
             virtual void getQueryInfo(std::deque<NM::Data>& deq);
     };
 }

@@ -2,24 +2,10 @@
 #include "textQueryTask.h"
 #include "topk.h"
 #include "edit_distance.h"
+#include "index.h"
 #include <sstream>
-void NM::CTextQueryTask::getQueryInfo(std::deque<NM::Data>& deq)
-{
-    CTextQueryServer* pserver = CTextQueryServer::getInstance();
-    __gnu_cxx::hash_map<std::string,int,NM::CMyHash> hm_wordfreq = pserver->getwordfreq();
-    std::cout<<"wordfreq size:"<<hm_wordfreq.size()<<std::endl;
-    __gnu_cxx::hash_map<std::string,int,NM::CMyHash>::iterator itr = hm_wordfreq.begin();
-    NM::Editdistance ed;
-    int distance;
-    NM::CTopk<NM::Data> topk(MAX_QUE_SIZE);
-    for(;itr != hm_wordfreq.end();++itr)
-    {
-        distance = ed(m_querystr,itr->first);
-        NM::Data val(itr->first,distance,itr->second);
-        topk.push(val);
-    }
-    topk.gettopk(deq);
-}
+#include <time.h>
+#include <iomanip>
 void NM::CTextQueryTask::sendMessage(std::deque<NM::Data>& deq)
 {
     int sockfd = socket(AF_INET,SOCK_DGRAM,0);
@@ -37,9 +23,59 @@ void NM::CTextQueryTask::sendMessage(std::deque<NM::Data>& deq)
         sin<<" ";
     }
     strquery = sin.str();
+    if(strquery.length() ==0)
+        strquery = "no data\n";
     std::cout<<strquery<<std::endl;
     udp.send(strquery.c_str(),strquery.size());
     close(sockfd);
+}
+
+void NM::CTextQueryTaskSimple::getQueryInfo(std::deque<NM::Data>& deq)
+{
+    clock_t begin_t = clock();
+    CTextQueryServer* pserver = CTextQueryServer::getInstance();
+    __gnu_cxx::hash_map<std::string,int,NM::CMyHash> hm_wordfreq = pserver->getwordfreq();
+    std::cout<<"wordfreq size:"<<hm_wordfreq.size()<<std::endl;
+    __gnu_cxx::hash_map<std::string,int,NM::CMyHash>::iterator itr = hm_wordfreq.begin();
+    NM::Editdistance ed;
+    int distance;
+    NM::CTopk<NM::Data> topk(MAX_QUE_SIZE);
+    for(;itr != hm_wordfreq.end();++itr)
+    {
+        distance = ed(m_querystr,itr->first);
+        NM::Data val(itr->first,distance,itr->second);
+        topk.push(val);
+    }
+    topk.gettopk(deq);
+    clock_t end_t = clock();
+    double time = (end_t - begin_t)*1.0/CLOCKS_PER_SEC;
+    std::cout<<"time:"<<time<<std::endl;
+}
+
+void NM::CTextQueryTaskWithIndex::getQueryInfo(std::deque<NM::Data>& deq)
+{
+    clock_t clock1 = clock();
+    typedef  NM::CIndex::IndexVecType IndexVecType;
+    typedef  NM::CIndex::IndexQueryVecType IndexQueryVecType;
+    NM::CIndex* pIndex = NM::CIndex::getInstance();
+    IndexVecType& indexVec = pIndex->getIndexVec();
+    std::set<IndexQueryVecType::size_type> queryIndexSet;
+    pIndex->getQueryIndex(m_querystr,queryIndexSet);
+    std::set<IndexQueryVecType::size_type>::iterator itr;
+    NM::Editdistance ed;
+    int distance;
+    NM::CTopk<NM::Data> topk(MAX_QUE_SIZE);
+    for(itr = queryIndexSet.begin();itr != queryIndexSet.end();++itr)
+    {
+        distance = ed(m_querystr,indexVec[*itr].first);
+        NM::Data val(indexVec[*itr].first,distance,indexVec[*itr].second);
+        topk.push(val);
+    }
+    topk.gettopk(deq);
+    clock_t clock4 = clock();
+    double time = (clock4 - clock1)*1.0/CLOCKS_PER_SEC;
+    //std::cout<<"time:"<<std::fixed<<std::setprecision(6)<<time<<std::endl;
+    std::cout<<"time:"<<time<<"clock4:"<<clock4<<"clock1:"<<clock1<<"PER:"<<CLOCKS_PER_SEC<<std::endl;
 }
 
 

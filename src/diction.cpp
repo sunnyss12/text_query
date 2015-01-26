@@ -11,6 +11,7 @@
 #include "config.h"
 #include "gbk2utf_8.h"
 #include "NLPIR.h"
+#include "index.h"
 NM::CDiction::CDiction()
 {
     CConfig* pconfig = NM::CConfig::getInstance();
@@ -128,20 +129,17 @@ void NM::CDiction::getwordfreq_file(std::string& filepath)
             line[pos] = line[pos] + 'a' - 'A';
             pos++;
         }
-
+//空格分为全角和半角空格，对于全角空格要变为半角空格
         for(int i=0;i<line.size();i++)
             if(ispunct(line[i]))
                 line[i]=' ';
         partiline = (char*)NLPIR_ParagraphProcess(line.c_str(),0);
         sin.str(partiline);
-        //sin.str(line);
         sin.clear();
         while(sin>>partiword)
         {
             if(m_set_stop.find(partiword) != m_set_stop.end())
                 continue;
-            //if(partiword.size() == 1 && ispunct(partiword[0]))
-            //    continue;
             m_word_freq[partiword]++;
         }
     }
@@ -160,7 +158,7 @@ void NM::CDiction::wordfreq_savetofile()
     __gnu_cxx::hash_map<std::string,int,NM::CMyHash>::iterator itr = m_word_freq.begin();
     for(;itr!=m_word_freq.end();itr++)
     {
-        fout<<std::left<<std::setw(20)<<itr->first<<std::left<<itr->second<<std::endl;
+        fout<<std::left<<std::setw(30)<<itr->first<<std::left<<itr->second<<std::endl;
     }
     fout.close();
 
@@ -168,6 +166,8 @@ void NM::CDiction::wordfreq_savetofile()
 
 void NM::CDiction::make_dict()
 {
+    if(isFileExist(m_wordfreqpath.c_str()))
+        return;
     getstopword();
     getwordfreq_dir(m_distdir);
     wordfreq_savetofile();
@@ -177,6 +177,10 @@ int main(int argc,char* argv[])
 {
     NM::CDiction* pdiction = NM::CDiction::getInstance();
     pdiction->make_dict();
+    NM::CIndex* pindex = NM::CIndex::getInstance();
+    pindex->loadIndexVecFromDiction();
+    pindex->buildIndexFromDiction();
+    pindex->saveIndexToFile();
 
 }
 

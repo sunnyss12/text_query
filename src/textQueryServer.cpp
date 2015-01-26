@@ -5,6 +5,8 @@
 #include "textQueryTask.h"
 #include "config.h"
 #include "edit_distance.h"
+#include "index.h"
+#include "common.h"
 extern void ontextQueryMessage(int sockfd,const std::string& ip,int port,char* buf,int size);
 NM::CTextQueryServer::CTextQueryServer()
 {
@@ -43,17 +45,18 @@ void NM::CTextQueryServer::readdict()
     std::string word;
     int freq;
     std::stringstream sin;
-    int cnt = 0;
     while(std::getline(fin,line))
     {
         sin.clear();
         sin.str(line);
         sin>>word>>freq;
         m_word_freq[word] = freq;
-        cnt++;
     }
-    std::cout<<"cnt:"<<cnt<<std::endl;
     fin.close();
+}
+void NM::CTextQueryServer::readIndex()
+{
+    NM::CIndex* pIndex = NM::CIndex::getInstance();  //CIndex构造函数中包含readIndex的功能
 }
 
 MY_THREAD::CThreadPool* NM::CTextQueryServer::getThreadPool()
@@ -67,7 +70,6 @@ __gnu_cxx::hash_map<std::string,int,NM::CMyHash>& NM::CTextQueryServer::getwordf
 void NM::CTextQueryServer::start()
 {
     m_pthreadpool->on();
-    std::cout<<"start"<<std::endl;
     m_pepoll->setOnMessage(ontextQueryMessage);
     while(1)
     {
@@ -88,7 +90,7 @@ NM::CTextQueryServer::~CTextQueryServer()
 void ontextQueryMessage(int sockfd,const std::string& ip,int port,char* buf,int size)
 {
     std::cout<<"ontextQueryMessage"<<std::endl;
-    NM::CTextQueryTask* ptask = new NM::CTextQueryTask(sockfd,ip,port,buf,size);
+    NM::CTextQueryTask* ptask = new NM::CTextQueryTaskWithIndex(sockfd,ip,port,buf,size);
     MY_THREAD::CThreadPool* pthreadpool = NM::CTextQueryServer::getInstance()->getThreadPool();
     if(pthreadpool != NULL)
         pthreadpool->addTask(ptask);
@@ -98,5 +100,6 @@ int main(int argc,char* argv[])
 {
     NM::CTextQueryServer* pserver = NM::CTextQueryServer::getInstance();
     pserver->readdict();
+    pserver->readIndex();
     pserver->start();
 }

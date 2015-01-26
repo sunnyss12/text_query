@@ -16,6 +16,7 @@ namespace NM
             CTextQueryServer();
             static CTextQueryServer* getInstance();
             void readdict();
+            void readIndex();
             MY_THREAD::CThreadPool* getThreadPool();
             __gnu_cxx::hash_map<std::string,int,NM::CMyHash>& getwordfreq();
             void start();

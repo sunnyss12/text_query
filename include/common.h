@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <ext/hash_map>
+#include <fstream>
 #define ERR_EXIT(m)\
     do{\
         perror(m);\
@@ -20,4 +21,6 @@ namespace NM
         }
     };
 }
+
+bool isFileExist(const char* filepath);
 #endif
