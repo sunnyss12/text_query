@@ -41,14 +41,14 @@ namespace MY_THREAD
             CMutex m_lock;
             CCond m_pro_cond;
             CCond m_con_cond;
-            std::queue<CPtask> m_queue;
+            std::queue<CTask*> m_queue;
             int m_capacity;
             bool m_stop;
         public:
             CQueue(int capacity):m_capacity(capacity),m_lock(),m_pro_cond(m_lock),m_con_cond(m_lock),m_stop(false)
         {
         }
-            bool produce(CPtask ptask)
+            bool produce(CTask* ptask)
             {
                 m_lock.Lock();
                 while(m_queue.size() >= m_capacity && !m_stop)
@@ -63,7 +63,7 @@ namespace MY_THREAD
                 m_con_cond.NotifyAll();
                 return true;
             }
-            bool consume(CPtask& ptask)
+            bool consume(CTask** ptask)
             {
                 m_lock.Lock();
                 while(m_queue.empty() && !m_stop)
@@ -73,7 +73,7 @@ namespace MY_THREAD
                     m_pro_cond.NotifyAll();
                     return false;
                 }
-                ptask = m_queue.front();
+                *ptask = m_queue.front();
                 m_queue.pop();
                 m_lock.unLock();
                 m_pro_cond.NotifyAll();

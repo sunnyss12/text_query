@@ -7,6 +7,7 @@
 #include "edit_distance.h"
 #include "index.h"
 #include "common.h"
+#include "cache.h"
 extern void ontextQueryMessage(int sockfd,const std::string& ip,int port,char* buf,int size);
 NM::CTextQueryServer::CTextQueryServer()
 {
@@ -70,6 +71,8 @@ __gnu_cxx::hash_map<std::string,int,NM::CMyHash>& NM::CTextQueryServer::getwordf
 void NM::CTextQueryServer::start()
 {
     m_pthreadpool->on();
+    NM::CCacheManager* pCacheManager = NM::CCacheManager::getInstance();
+    pCacheManager->start();
     m_pepoll->setOnMessage(ontextQueryMessage);
     while(1)
     {
@@ -90,7 +93,8 @@ NM::CTextQueryServer::~CTextQueryServer()
 void ontextQueryMessage(int sockfd,const std::string& ip,int port,char* buf,int size)
 {
     std::cout<<"ontextQueryMessage"<<std::endl;
-    NM::CTextQueryTask* ptask = new NM::CTextQueryTaskWithIndex(sockfd,ip,port,buf,size);
+    //NM::CTextQueryTask* ptask = new NM::CTextQueryTaskWithIndex(sockfd,ip,port,buf,size);  //需要修改..........................................
+    NM::CTextQueryTask* ptask = new NM::CTextQueryTaskWithCache(sockfd,ip,port,buf,size);  //需要修改..........................................
     MY_THREAD::CThreadPool* pthreadpool = NM::CTextQueryServer::getInstance()->getThreadPool();
     if(pthreadpool != NULL)
         pthreadpool->addTask(ptask);

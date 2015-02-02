@@ -3,6 +3,7 @@
 #include "topk.h"
 #include "edit_distance.h"
 #include "index.h"
+#include "cache.h"
 #include <sstream>
 #include <time.h>
 #include <iomanip>
@@ -78,5 +79,30 @@ void NM::CTextQueryTaskWithIndex::getQueryInfo(std::deque<NM::Data>& deq)
     std::cout<<"time:"<<time<<"clock4:"<<clock4<<"clock1:"<<clock1<<"PER:"<<CLOCKS_PER_SEC<<std::endl;
 }
 
-
+void NM::CTextQueryTaskWithCache::getQueryInfo(std::deque<NM::Data>& deq)
+{
+    NM::CCacheManager* pcacheManager = NM::CCacheManager::getInstance();
+    pthread_t threadId = pthread_self();
+    NM::CCache* m_pCache = pcacheManager->getCache(threadId);
+    NM::CCache::CacheVecType queryVec;
+    NM::CTopk<NM::Data> topk(MAX_QUE_SIZE);
+    if(m_pCache->searchCacheData(m_querystr,queryVec))
+    {
+        std::cout<<"cache find"<<std::endl;
+        for(NM::CCache::CacheVecType::iterator itr = queryVec.begin();itr != queryVec.end();++itr)
+        {
+            topk.push(NM::Data(itr->word,itr->distance,itr->freq));
+        }
+        topk.gettopk(deq);
+        return;
+    }
+    std::cout<<"cache not find"<<std::endl;
+    CTextQueryTaskWithIndex::getQueryInfo(deq);
+    for(std::deque<NM::Data>::iterator itr = deq.begin();itr!=deq.end();++itr)
+    {
+        queryVec.push_back(NM::CacheData(itr->m_word,itr->m_distance,itr->m_freq));
+    }
+    m_pCache->addCacheData(m_querystr,queryVec);
+    
+}
 

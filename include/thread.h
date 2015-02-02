@@ -31,10 +31,11 @@ namespace MY_THREAD
             {
                
             }
-            void start(CThreadRun* run)
+            pthread_t start(CThreadRun* run)
             {
                 if(pthread_create(&m_thread,NULL,thread_run,run))
-                    ERR_EXIT("pthread_create");                   
+                    ERR_EXIT("pthread_create");
+                return m_thread;
             }
         private:
             pthread_t m_thread; 

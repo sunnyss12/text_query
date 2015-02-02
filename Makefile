@@ -1,5 +1,5 @@
 .PHONY:server client dict
-server:./src/config.cpp ./src/textQueryServer.cpp ./src/textQueryTask.cpp ./src/edit_distance.cpp ./src/index.cpp
+server:./src/config.cpp ./src/textQueryServer.cpp ./src/textQueryTask.cpp ./src/edit_distance.cpp ./src/index.cpp ./src/cache.cpp
 	g++  -o $@ $^ -lpthread -I ./include
 client:./client.cpp ./src/config.cpp
 	g++ -o $@ $^ -lpthread -I ./include

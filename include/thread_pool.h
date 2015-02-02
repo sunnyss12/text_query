@@ -5,7 +5,6 @@
 #include "thread.h"
 namespace MY_THREAD
 {
-
     class CThreadPoolRun:public CThreadRun
     {
         public:
@@ -16,38 +15,52 @@ namespace MY_THREAD
             {
                 while(1)
                 {
-                   CPtask ptask;
-                   if(!m_pque->consume(ptask))
+                   CTask* ptask;
+                   if(!m_pque->consume(&ptask))
                        return;
                    ptask->execute();
-                   ptask.destroy();
+                   delete ptask;
                 }
             }
 
         private:
             CQueue* m_pque;
-
     };
 
+    struct CThreadInfo
+    {
+        pthread_t m_threadId;
+    };
     class CThreadPool
     {
         public:
             CThreadPool(int nworkers=0,int ncapacity=0):m_worker(nworkers),m_que(ncapacity),m_run(&m_que),m_stop(true)
         {
+            m_threadInfo = new CThreadInfo[nworkers];
         }
+            ~CThreadPool()
+            {
+                delete[] m_threadInfo;
+            }
+            
             void on()
             {
                 if(m_stop == true)
                 {
                     m_que.setstop(false);
                     m_stop = false;
-                    std::vector<CThread>::iterator itr = m_worker.begin();
-                    for(;itr != m_worker.end();++itr)
+                    for(int index=0;index< m_worker.size();++index)
                     {
-                        itr->start(&m_run);
+                        m_threadInfo[index].m_threadId = m_worker[index].start(&m_run);
                     }
                 }
             }
+
+            CThreadInfo* getThreadInfo()
+            {
+                return m_threadInfo;
+            }
+
             void off()
             {
                 if(m_stop == false)
@@ -56,7 +69,7 @@ namespace MY_THREAD
                     m_stop = true;                    
                 }
             }
-            bool addTask(CPtask ptask) //阻塞函数
+            bool addTask(CTask* ptask) //阻塞函数
             {
                 m_que.produce(ptask);
             }
@@ -64,6 +77,7 @@ namespace MY_THREAD
             std::vector<CThread> m_worker;
             MY_THREAD::CQueue m_que;
             CThreadPoolRun m_run;
+            CThreadInfo* m_threadInfo; 
             bool m_stop;
 
     };

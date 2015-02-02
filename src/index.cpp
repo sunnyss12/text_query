@@ -147,7 +147,6 @@ void NM::CIndex::loadIndexMapFromIndexFile()
         m_index_map[letter] = index_set;
     }
     fin.close();
-    std::cout<<"loadend"<<std::endl;
 }
 void NM::CIndex::getQueryIndex(const std::string& word,std::set<IndexQueryVecType::size_type>& queryIndex)
 {
