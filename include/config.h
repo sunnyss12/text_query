@@ -9,7 +9,7 @@ namespace NM
         friend class CSingleton<CConfig>;
         private:
             std::string m_configpath;
-            CConfig():m_configpath("./data/config.ini")
+            CConfig():m_configpath("../config/config.ini")
         {
         }
         public:

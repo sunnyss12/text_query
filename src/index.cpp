@@ -148,6 +148,7 @@ void NM::CIndex::loadIndexMapFromIndexFile()
     }
     fin.close();
 }
+//getQueryIndex：把word分隔成一个一个单词或者文字，然后把所有单词或文字对应的倒排索引都存储到queryIndex里
 void NM::CIndex::getQueryIndex(const std::string& word,std::set<IndexQueryVecType::size_type>& queryIndex)
 {
     std::vector<std::string> letterVec;
