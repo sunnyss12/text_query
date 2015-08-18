@@ -7,6 +7,7 @@
 #include <sstream>
 #include <time.h>
 #include <iomanip>
+#include <json/json.h>
 void NM::CTextQueryTask::sendMessage(std::deque<NM::Data>& deq)
 {
     int sockfd = socket(AF_INET,SOCK_DGRAM,0);
@@ -14,17 +15,18 @@ void NM::CTextQueryTask::sendMessage(std::deque<NM::Data>& deq)
     std::string strquery;
     std::stringstream sin;
     std::deque<NM::Data>::iterator itr = deq.begin();
+    Json::Value root;
+    Json::Value item;
+    Json::FastWriter writer;
     for(;itr != deq.end();++itr)
     {
-        sin<<itr->m_word;
-        sin<<":";
-        sin<<itr->m_distance;
-        sin<<":";
-        sin<<itr->m_freq;
-        sin<<" ";
+        item["word"] = itr->m_word;
+        item["distance"] = itr->m_distance;
+        item["freq"] = itr->m_distance;
+        root.append(item);
     }
-    strquery = sin.str();
-    if(strquery.length() ==0)
+    strquery = writer.write(root);
+    if(deq.size() ==0)
         strquery = "no data\n";
     std::cout<<strquery<<std::endl;
     udp.send(strquery.c_str(),strquery.size());
